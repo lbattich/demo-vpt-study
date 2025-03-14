@@ -2,4 +2,7 @@
 
 Visual orientation detection task for online experimentation
 
-By Lucas Battich, 2025
+Acces demo: https://lbattich.github.io/demo-vpt-study/
+
+Lucas Battich, 2025
+
