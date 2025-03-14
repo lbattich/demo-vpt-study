@@ -1,0 +1,23 @@
+/* - - - - - - - - - - - - - */
+/*                           */
+/*PERCEPTUAL CONFIDENCE STUDY*/
+/*                           */
+/*    CUSTOM STYLESHEET      */
+/*                           */
+/* - - - - - - - - - - - - - */
+
+
+body {
+  background-color: #808080;
+}
+.jspsych-display-element {
+/*  font-size: 25px;*/
+  color: white;
+}
+canvas {
+  cursor: none;
+}
+
+/*.jspsych-content {
+  max-width: 80%; 
+}*/

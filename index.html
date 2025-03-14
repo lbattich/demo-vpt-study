@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Demo: Visual detection experiment</title>
+
+    <script type="text/javascript" src="js/jspsych/dist/jspsych.js"></script>
+    <script type="text/javascript" src="js/jspsych/dist/plugin-html-keyboard-response.js"></script>
+    <script type="text/javascript" src="js/jspsych/dist/plugin-image-keyboard-response.js"></script>
+    <script type="text/javascript" src="js/jspsych/dist/plugin-instructions.js"></script>
+    <script type="text/javascript" src="js/jspsych/dist/plugin-survey-text.js"></script>
+    <script type="text/javascript" src="js/jspsych/dist/plugin-fullscreen.js"></script>
+    <script type="text/javascript" src="js/jspsych/dist/plugin-browser-check.js"></script>
+    <script type="text/javascript" src="js/jspsych/dist/plugin-preload.js"></script>
+    <script type="text/javascript" src="js/jspsych/dist/plugin-html-button-response.js"></script>
+    <!-- <script type="text/javascript" src="lib/jspsych-7-pavlovia-2022.1.1.js"></script> -->
+    <script type="text/javascript" src="js/plugin-virtual-chinrest-custom.js"></script>
+    <script src="js/jspsych-psychophysics-custom.js"></script>
+    <script src="js/jsQUEST.js"></script>
+
+    <link rel="stylesheet" type="text/css" href="js/jspsych/dist/jspsych.css"/>
+    <link rel="stylesheet" type="text/css" href="jstest_style.css" />
+
+  </head>
+  <body></body>
+  <script>
+
+    /* initialize jsPsych */
+    const jsPsych = initJsPsych({
+      on_finish: function() {
+        // let all_data = jsPsych.data.get();
+        // console.log(all_data.csv());
+        // window.location = "https://app.prolific.co/submissions/complete?cc=XXXXXXX";
+
+      }
+    });
+
+    // For zoom detection
+    var px_ratio = window.devicePixelRatio || window.screen.availWidth / document.documentElement.clientWidth;
+    var previousScale = 1;
+    function neutralizeZoom(){
+        var scale = 1/window.devicePixelRatio;
+        document.body.style.transform = 'scale('+(1/previousScale)+')';
+        document.body.style.transform = 'scale('+scale+')';
+        var widthDiff = parseInt(getComputedStyle(window.document.body).width)*(scale-1);
+        var heightDiff = parseInt(getComputedStyle(window.document.body).height)*(scale-1);
+        document.body.style.left = widthDiff/2 + 'px';
+        document.body.style.top = heightDiff/2 + 'px';
+        previousScale = scale;
+    };
+
+    function isZooming(){
+        var newPx_ratio = window.devicePixelRatio || window.screen.availWidth / document.documentElement.clientWidth;
+        if(newPx_ratio != px_ratio){
+            px_ratio = newPx_ratio;
+            neutralizeZoom();
+            alert("This study requires that you do not zoom the web page. Please reset your zoom to 0%.");
+            return true;
+        }else{
+            return false;
+        }
+        jsPsych.data.addProperties({zoom_px_ratio: px_ratio});
+    }
+    window.addEventListener('resize', function(event){ isZooming(); });
+
+    /* create timeline */
+    var timeline = [];
+
+    /* Key variables */
+    var globalHeight = window.innerHeight;
+    const mean_array = array => array.reduce((a, b) => a + b) / array.length;
+    // generate a custom subject ID with 12 characters
+    const subject_id = jsPsych.randomization.randomID(12);
+
+    /* * * * * * * * * * * * */
+    /*  Experiment settings  */
+    /* * * * * * * * * * * * */
+
+    // Number of trials main experiment
+    const n_trials_multiplier = 15; // 16 trials * 15 = 240 total trials; 60 trials per condition
+
+    // Number of trials in each staircase level
+    const stair_n_trials = 40; // total staircase trials = stair_n_trials * 2
+
+    // Catch trial settings
+    const n_catch_trials = 6;    // number of catch trials in main experiment
+    const catch_contrast = 0.22; // gabor contrast for catch trials
+
+    // Number of blocks in the main experiment (number of breaks = n_blocks - 1)
+    const n_blocks = 4;
+
+    // Participant position variables:
+    const min_distance_mm = 400;   // The minumum allowed sitting distance, in mm
+    const max_distance_mm = 880;   // The maximum allowed sitting distance, in mm
+    const max_failures = 2;        // End study when n times the calculated distance fails to be within the allowed range
+
+    /* * * * * * * * * * * * */
+    /*   Stimuli properties  */
+    /* * * * * * * * * * * * */
+
+    const stimulus_duration = 200;        // Stimulus duration in ms
+    const cue_soa = 600;                  // SOA between cue and target stimulus in ms
+    const cue_onset = 700;                // Fixation duration in ms, time before cue onset
+    const stimulus_onset = cue_onset + cue_soa;
+
+    const deg2pixConst = 50; // Scaling constant: how many pixels are 1 degree of visual angle
+
+    const stim_phase = 0;                 // phase of the sine wave
+    const stim_tilt = 30;                 // orientation of the gabor patch in degrees relative to the horizontal axis 
+
+    const stim_size = deg2pixConst * 3;   // stimulus subtends 3 degrees of visual angle
+    const stim_sf = 5 / deg2pixConst;     // spatial frequency, converted unit is cycles per pixel; from 5 cyc/degrees 
+    const stim_sc = stim_size / 6;        // standard deviation of the gaussian mask; define default: sd=size/6
+
+    const stim_x = (deg2pixConst * 4.5) + (stim_size / 2);  // stim subtend x = 4.5 degrees from center
+    const stim_y = (deg2pixConst * 1) + (stim_size / 2);    // stim subtend y = 1 degrees from center
+    
+    const left_coord = [- stim_x, - stim_y];
+    const right_coord = [stim_x, - stim_y];
+    const fixPosY = (- stim_y);                             // position of fixation and ?
+    const stimPos = left_coord;
+    const stimPosStairY = (- stim_y + stim_x);
+
+    const fixLength = 0.6 * deg2pixConst;     // size of fixation cross
+    const fixWidth = 0.09 * deg2pixConst;      // line width of fixation cross
+
+    const noiseConstant = 0.1;            // contrast intensity for white noise stimulus
+    const question_font = "" + 0.7 * deg2pixConst + "px Arial, sans-serif"; // "bold " + 0.7 * deg2pixConst + "px Arial, sans-serif";
+
+    const images = [ // All the images used in this exp
+      'stimuli/instructions/instruction_ori_a1.png',
+      'stimuli/instructions/instruction_ori_a2.png',
+      'stimuli/instructions/instruction_ori_a3.png',
+      'stimuli/instructions/instruction_ori_a4.png',
+      'stimuli/instructions/instruction_ori_a5.png',
+      'stimuli/instructions/instruction_ori_b1.png',
+      'stimuli/instructions/instruction_ori_b2.png',
+      'stimuli/card.png',];
+
+
+    // /* init connection with pavlovia.org */
+    // var pavlovia_init = {
+    //     type: jsPsychPavlovia,
+    //     command: "init",
+    //     on_finish: function(){
+    //       jsPsych.data.addProperties({experiment: "orientation_arrow"});
+    //       jsPsych.data.addProperties({subject_id: subject_id});
+    //       jsPsych.data.addProperties({stimulus_duration: stimulus_duration});
+    //       jsPsych.data.addProperties({cue_soa: cue_soa});
+    //     },
+    // };
+    // timeline.push(pavlovia_init);
+
+    /* preload images */
+    const preload = {
+      type: jsPsychPreload,
+      images: images
+    };
+    timeline.push(preload);
+
+    /* * * * * * * * * * * * */
+    /*  Consent and Set-up   */
+    /* * * * * * * * * * * * */
+
+    // Define Consent screen
+    const consent = {
+      type: jsPsychInstructions,
+      pages: ['<b>Information about informed consent</b><br><br>'+
+      'Please read very carefully!<br><br>'+
+      'We invite you to participate in this scientific study. Participation requires that you give your informed consent. '+
+      'You will be shown simple visual stimuli in different scenarios, and asked to give responses about the stimuli. '+
+      'Before proceeding, please consider the following information:<br></br>'+ 
+      'The study will take on average about 15-20 minutes to complete. '+
+      'You will be paid for a estimated time of max 25 minutes at the rate of \u00A3 9 per hour for your participation. '+
+      'At the end of the experiment you will receive a code. You must enter this code in Prolific Academic to receive your payment. '+
+      'There are no risks involved in this study. '+
+      'Your individual privacy will be maintained in all published and unpublished reports resulting from the study.<br><br> '+
+      'Participation in this research study is voluntary. You may choose not to participate. You can cancel participation any time by closing your browser without further consequences. You can also contact the researcher at any time before the end of August 2025 to withdraw your data from the study.<br></br> '+
+      'By clicking the button below and proceeding to the study task, you certify that you have read this form and agreed to participate in accordance with the above conditions. If you have any questions or concerns about your participation or payment, please contact the researcher: Dr. Lucas Battich, at cognition.exp.ens@proton.me<br></br> ' +
+      '<p><small><em>(If you do not consent to participate in this study, please return this submission on Prolific by selecting the "stop without completing" button)</em></small></p>'
+      ],
+      show_clickable_nav: true,
+    }
+    timeline.push(consent);
+
+    // Force fullscreen
+    const force_fullscreen = {
+      type: jsPsychFullscreen,
+      fullscreen_mode: true,
+      message: "<h1>Welcome!</h1>" +
+      "<p>This is an experiment to study your perceptual abilites. </p>" + 
+      "<p>To continue with the experiment, please make sure that you comply with these requirements:</p>" + 
+      "<ul style='text-align: left;'>" +
+      "<li>Make sure you are in a quiet environment and please don't listen to any music during the experiment.</li>" +
+      "<li>Sit in a straight, relaxed and comfortable position.</li>" +
+      "<li>Keep the same sitting position during the whole experiment. Try not to lean forwards or backwards</li>"  +
+      "<li>(You will have breaks to rest your focus throughout the experiment!)</li>" +
+      "<li>This experiment requires full screen mode. Please keep the window on full screen during the whole duration of the experiment.</li>" +
+       "</ul></br></br>" +
+      "<p>Press the button below to confirm you agree with these requirements and to enter full screen mode</p>"
+    };
+    timeline.push(force_fullscreen);
+
+    // Exclusion check for mobile / get full screen height
+    const browserCheck = {
+      type: jsPsychBrowserCheck,
+      minimum_width: 1000,
+      minimum_height: 600,
+      inclusion_function: (data) => {
+        return data.mobile === false;
+      },
+      exclusion_message: (data) => {
+        return "<p>You must use a desktop/laptop computer to participate in this experiment.</br></br>" + 
+        "As you cannot continue with the study, please return this submission on Prolific by selecting the 'stop without completing' button</p>";
+      },
+      on_finish: function(data){
+        globalHeight = data.height;
+      }
+    };
+    timeline.push(browserCheck);
+
+    // //Participant Prolific ID
+    // const prolific = {
+    //   type: jsPsychSurveyText,
+    //   questions: [{prompt:'Please enter your Prolific ID below:',
+    //               placeholder: 'ID',
+    //               required: true,
+    //               name: 'prolificId'}],
+    //   on_finish: function(data) {
+    //     jsPsych.data.addProperties({prolific_id: data.response.prolificId});
+    //   }
+    // }
+    // timeline.push(prolific);
+
+    // Define chin-rest instructions
+    const chinrest_instructions = {
+      type: jsPsychInstructions,
+      pages: [`<p>We will now quickly measure your real screen resolution and how far you are sitting</p><br>
+      <p>For this, we use a neat fact about your peripheral vision: the blind spot.</p>
+      <p><b>Please follow the instructions very carefully!</b></p>
+      <p>We hope you'll enjoy "seeing" your blind spot in action. But if you cannot follow the required steps, your sitting position will be miscalculated.<br>Then the study will terminate and you will be asked to return your Prolific submission. <br>Unfortunately, we will not be able to compensate your participation.<p><br>
+      <p>Press the button below to confirm you agree and continue</p>`
+      ],
+      show_clickable_nav: true,
+    };
+    timeline.push(chinrest_instructions);
+
+    // Get pixel-to-cm rate and participant's viewing distance
+    // Using "Virtual Chinrest" method from Li et al. (2020) Sci. Rep.
+    var distance = 1; // Estimated distance to the screen in millimeters
+    var chinrest_failures = 0; // did the chin-rest test fail?
+    const virtualChinrest = {
+      type: jsPsychVirtualChinrest,
+      blindspot_reps: 3,
+      max_failures: max_failures,
+      min_distance_mm: min_distance_mm,
+      max_distance_mm: max_distance_mm,
+      resize_units: "deg",
+      pixels_per_unit: deg2pixConst,
+      item_path: "stimuli/card.png",
+      on_finish: function(data) {
+        chinrest_failures = data.failures;
+        distance = data.view_dist_mm;
+      }
+    };
+    timeline.push(virtualChinrest);
+
+    // const pavlovia_finish_return = {
+    //     type: jsPsychPavlovia,
+    //     command: "finish",
+    // };
+    const end_study_return = {
+        type: jsPsychHtmlKeyboardResponse,
+        choices: "NO_KEYS",
+        stimulus: `<div>
+          <p>Unfortunately your position doesn't correspond to the study requirements.</p>
+          <p>We cannot continue with your participation.<p>
+          <p>You will be asked to return your participant submission in Prolific.</p>
+          <p>You can close this page.</p>
+          </div>`
+    };
+    const end_study_conditional = {
+      timeline: [end_study_return],
+      // timeline: [pavlovia_finish_return, end_study_return],
+      conditional_function: function(){
+          return (chinrest_failures >= max_failures);
+        },
+    };
+    timeline.push(end_study_conditional);
+
+   
+    /* * * * * * * * * * * * */
+    /*    Instructions 1     */
+    /* * * * * * * * * * * * */
+
+    const instruction_img = {
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: function(){
+        return "<div style='background-color:#808080;''><img style='width:90vw; height:100%;' src='"+jsPsych.timelineVariable('image', true)+"'></img></div>";
+      },
+      choices: [' '],
+    };
+    const instructions1 = {
+      timeline: [instruction_img],
+      timeline_variables: [
+        {image: 'stimuli/instructions/instruction_ori_a1.png'},
+        {image: 'stimuli/instructions/instruction_ori_a2.png'},
+        {image: 'stimuli/instructions/instruction_ori_a3.png'},
+        {image: 'stimuli/instructions/instruction_ori_a4.png'},
+        {image: 'stimuli/instructions/instruction_ori_a5.png'}
+      ]
+    }
+    timeline.push(instructions1);
+
+
+    /* * * * * * * * * * * * */
+    /*   QUEST Staircase     */
+    /* * * * * * * * * * * * */
+
+    const tGuess_low = 0.01;
+    const tGuessSd_low = 0.09;
+    const pThreshold_low = 0.8;
+    const tGuess_high = 0.007;
+    const tGuessSd_high = 0.09;
+    const pThreshold_high = 0.8;
+    const beta = 3.5;
+    const delta = 0.01;
+    const gamma = 0.5;
+    const grain = 0.0001;
+
+    var q_low = jsQUEST.QuestCreate(tGuess_low, tGuessSd_low, pThreshold_low, beta, delta, gamma, grain);
+    var q_high = jsQUEST.QuestCreate(tGuess_high, tGuessSd_high, pThreshold_high, beta, delta, gamma, grain);
+
+    var stair_trial_n = 0; // current trial number in staircase
+
+    var stair_intensity = [];
+    var threshold_low = [];
+    var threshold_high = [];
+    var sd_low = [];
+    var sd_high = [];
+    var threshold;
+
+    // min and max intensity values
+    const maxval = 1;
+    const minval = 0;
+
+    const stair_levels = jsPsych.randomization.repeat(["low", "high"], stair_n_trials);
+    const stair_tilt = jsPsych.randomization.repeat([0,90], stair_n_trials);
+    const stair_marker_condition = jsPsych.randomization.repeat([0,1], stair_n_trials);
+    const stair_stimulus_position = jsPsych.randomization.repeat(["left", "right"], stair_n_trials);
+
+    // const stair_factors = {
+    //     stair_levels: ["low", "high"],
+    //     stair_tilt: [0,90],
+    //     stair_marker: [0, 1],
+    //     stair_stimulus_position: ["left", "right"],
+    // }
+    // const stair_all_trials = jsPsych.randomization.factorial(stair_factors, stair_n_trials/length(stair_factors));
+
+    // console.log(stair_factors);
+    // console.log(2*stair_n_trials/length(stair_factors))
+    // console.log(stair_all_trials)
+  
+    // Define Staircase stimuli
+
+    const stair_fixation_cross = {
+        obj_type: 'cross',   
+        origin_center: true,
+        startX: 0, // location of the cross's center in the canvas
+        startY: fixPosY,
+        line_length: fixLength,
+        line_width: fixWidth,
+        line_color: 'white',
+        show_start_time: 0, // onset ms after the start of the trial
+        show_end_time: 800 + stimulus_duration, // offset ms after the start of the trial
+    }
+    const stair_gabor = {
+        obj_type: 'gabor',
+        origin_center: true,
+        tilt: function() { return stair_tilt[stair_trial_n]; }, // 0 = horizontal; 1 = vertical
+        sf: stim_sf,
+        phase: stim_phase,
+        width: stim_size,
+        sc: stim_sc,
+        startX: function() { return (stair_stimulus_position[stair_trial_n] === 'left')? left_coord[0] : right_coord[0]; },
+        startY: function() { return (stair_stimulus_position[stair_trial_n] === 'left')? left_coord[1] : right_coord[1]; },
+        contrast: function() { return stair_intensity.slice(-1)[0]; },
+        noiseContrast: noiseConstant,
+        show_start_time: 600, // ms after the start of the trial
+        show_end_time: 600 + stimulus_duration, // 300ms duration
+    }
+
+    const stair_marker = {
+        obj_type: 'cross',   
+        origin_center: true,
+        startX: function() { return (stair_stimulus_position[stair_trial_n] === 'left')? left_coord[0] : right_coord[0]; },
+        startY: function() { return (stair_stimulus_position[stair_trial_n] === 'left')? left_coord[1] : right_coord[1]; },
+        line_length: function() { return fixLength * 6 * stair_marker_condition[stair_trial_n] },
+        line_width: function() { return fixWidth * 1.2 * stair_marker_condition[stair_trial_n] },
+        line_color: '#CCCCCC',
+        show_start_time: 600, // ms after the start of the trial
+        show_end_time: 600 + stimulus_duration // 300ms duration
+    }
+
+    const stair_question = {
+        obj_type: 'text',
+        origin_center: true,
+        startX: 0, // location of the cross's center in the canvas
+        startY: fixPosY + 100,
+        content: '?\n\n\n\n\n\n\n\nUP: vertical\n\nDOWN: horizontal',
+        font: question_font,
+        text_color: 'white',
+        show_start_time: 800 + stimulus_duration // ms after the start of the trial
+    }
+
+    const stair_trial = {
+        type: jsPsychPsychophysics,
+        stimuli: [stair_fixation_cross, stair_marker, stair_gabor, stair_question],
+        canvas_height: function() { return globalHeight; },
+        choices: ['ArrowUp', 'ArrowDown'],
+        response_start_time: 700,  // start RT 100 ms from target/noise onset
+        data: {
+          'trial_id': 'staircase',
+        },
+
+        on_finish: function(data){
+            // console.log("----- trial has ended (on_finish function in trial) -----");
+            // console.log("the target was: " + stair_present[stair_trial_n]);
+            // console.log("the response was: " + data.response);
+            // console.log("the contrast intensity was: " + stair_intensity.slice(-1)[0]);
+
+            let correct_response = (stair_tilt[stair_trial_n] === 90)? "ArrowUp" : "ArrowDown";
+            let correct = Number(jsPsych.pluginAPI.compareKeys(data.response, correct_response));
+            let level = stair_levels[stair_trial_n];
+
+            data.stair_trial_n = stair_trial_n + 1;
+            data.stair_level = level;
+            data.stair_tilt = stair_tilt[stair_trial_n];
+            data.stair_marker = stair_marker_condition[stair_trial_n];
+            data.stair_correct = correct;
+            data.stair_trial_contrast = stair_intensity.slice(-1)[0];
+
+            // % Update the pdf
+            if (level === "low") {
+              // % Add the new datum (actual test intensity and observer response) to the database.
+              q_low = jsQUEST.QuestUpdate(q_low, stair_intensity.slice(-1)[0], correct); 
+
+              // Record current threshold estimate
+              const current_threshold = jsQUEST.QuestMean(q_low); // % Recommended by Pelli (1989) and King-Smith et al. (1994). 
+              const sd = jsQUEST.QuestSd(q_low);
+
+              threshold_low.push(current_threshold);
+              sd_low.push(sd);
+              data.stair_current_threshold = current_threshold;
+              data.stair_current_sd = sd;
+              // console.log("new threshold low: " + current_threshold)
+
+            } else {
+              // % Add the new datum (actual test intensity and observer response) to the database.
+              q_high = jsQUEST.QuestUpdate(q_high, stair_intensity.slice(-1)[0], correct);
+
+              // Record current threshold estimate
+              const current_threshold = jsQUEST.QuestMean(q_high); // % Recommended by Pelli (1989) and King-Smith et al. (1994). 
+              const sd = jsQUEST.QuestSd(q_high);
+
+              threshold_high.push(current_threshold);
+              sd_high.push(sd);
+              data.stair_current_threshold = current_threshold;
+              data.stair_current_sd = sd;
+              // console.log("new threshold high: " + current_threshold); 
+            }
+            stair_trial_n++;
+        },
+
+    }
+
+    /* define staircase procedure */
+
+    const stair_procedure = {
+        timeline: [stair_trial],
+        repetitions: 2 * stair_n_trials,
+        on_timeline_start: function() {
+            // console.log("----- starting QUEST trial -----");
+
+            let tTest
+            let level = stair_levels[stair_trial_n];
+
+            // find instensity value for current trial
+            if (level === "low") {
+              tTest = jsQUEST.QuestQuantile(q_low); // % Recommended by Pelli (1987)
+            } else {
+              tTest = jsQUEST.QuestQuantile(q_high); // % Recommended by Pelli (1987)
+            }
+
+            if ((tTest > maxval)) {
+                tTest = maxval;
+            } else {
+                if ((tTest < minval)) {
+                    tTest = minval;
+                } else {
+                    tTest = tTest;
+                }
+            }
+            stair_intensity.push(tTest);
+        },
+
+        on_timeline_finish: function() {
+
+            threshold = (threshold_low.slice(-1)[0] + threshold_high.slice(-1)[0]) / 2;
+            jsPsych.data.addProperties({final_threshold: threshold});
+
+        }
+    };
+
+    timeline.push(stair_procedure);
+
+
+    /* * * * * * * * * * * * */
+    /*    Instructions 2     */
+    /* * * * * * * * * * * * */
+
+    const instructions2 = {
+      timeline: [instruction_img],
+      timeline_variables: [
+        {image: 'stimuli/instructions/instruction_ori_b1.png'},
+        {image: 'stimuli/instructions/instruction_ori_b2.png'}
+      ]
+    }
+    timeline.push(instructions2);
+
+
+    /* * * * * * * * * * * * */
+    /*  Define Main trials   */
+    /* * * * * * * * * * * * */
+
+    /* Define main experiment paraments */
+
+    const factors = {
+        stimulus_position: ["left", "right"],
+        cue_direction: ["left", "right"],
+        tilt: [0, 90],
+        marker: [0, 1]
+    }
+    const all_factors = jsPsych.randomization.factorial(factors, 1);
+    const main_trial_variables = all_factors.map(obj => ({ ...obj,
+                                                arrow : (obj.cue_direction === "left") ? "\u21F7" : "\u21F8",
+                                                congruent : Number(obj.stimulus_position === obj.cue_direction),
+                                                correct_response : (obj.tilt === 90) ? "ArrowUp" : "ArrowDown" }));
+
+    var n_correct = [];
+    var trial_n = 1;
+    const total_n_trials = n_trials_multiplier * main_trial_variables.length;
+    // console.log("Total N of trials: " + total_n_trials);
+
+    /* Define trial stimuli */
+
+    const fixation_cross = {
+        obj_type: 'cross',   
+        origin_center: true,
+        startX: 0, // location of the cross's center in the canvas
+        startY: fixPosY,
+        line_length: fixLength,
+        line_width: fixWidth,
+        line_color: 'white',
+        show_start_time: 0, // onset ms after the start of the trial
+        show_end_time: cue_onset, // offset ms after the start of the trial
+
+    }
+
+    const arrow_cue = {
+        obj_type: 'text',
+        origin_center: true,
+        startX: 0, // location of the cross's center in the canvas
+        startY: fixPosY - 9,
+        content: jsPsych.timelineVariable('arrow'),
+        font: "" + 1.85 * deg2pixConst + "px Arial, sans-serif",
+        text_color: 'white',
+        show_start_time: cue_onset, // ms after the start of the trial
+        show_end_time: stimulus_onset + stimulus_duration + 100, // 500 ms + stim duration
+    }
+
+    const gabor = {
+        obj_type: 'gabor',
+        origin_center: true,
+        // tilt: stim_tilt,
+        tilt: jsPsych.timelineVariable('tilt'),
+        sf: stim_sf,
+        phase: stim_phase,
+        width: stim_size,
+        sc: stim_sc,
+        startX: function() { return (jsPsych.timelineVariable('stimulus_position') === 'left')? left_coord[0] : right_coord[0]; },
+        startY: function() { return (jsPsych.timelineVariable('stimulus_position') === 'left')? left_coord[1] : right_coord[1]; },
+        contrast: function() { return threshold; },
+        noiseContrast: noiseConstant,
+        show_start_time: stimulus_onset, // ms after the start of the trial
+        show_end_time: stimulus_onset + stimulus_duration, // 300ms duration
+    }
+
+    const marker = {
+        obj_type: 'cross',   
+        origin_center: true,
+        startX: function() { return (jsPsych.timelineVariable('stimulus_position') === 'left')? left_coord[0] : right_coord[0]; },
+        startY: function() { return (jsPsych.timelineVariable('stimulus_position') === 'left')? left_coord[1] : right_coord[1]; },
+        line_length: function() { return fixLength * 6 * jsPsych.timelineVariable('marker'); },
+        line_width: function() { return fixWidth * 1.2 * jsPsych.timelineVariable('marker'); },
+        line_color: '#CCCCCC',
+        show_start_time: stimulus_onset, // ms after the start of the trial
+        show_end_time: stimulus_onset + stimulus_duration, // 300ms duration
+    }
+
+    const question = {
+        obj_type: 'text',
+        origin_center: true,
+        startX: 0, // location of the cross's center in the canvas
+        startY: fixPosY + 100,
+        content: '?\n\n\n\n\n\n\n\nUP: vertical\n\nDOWN: horizontal',
+        font: question_font,
+        text_color: 'white',
+        show_start_time: stimulus_onset + stimulus_duration + 100 // ms after the start of the trial
+    }
+
+    const main_trial = {
+        type: jsPsychPsychophysics,
+        stimuli: [fixation_cross, arrow_cue, marker, gabor, question],
+        canvas_height: function() { return globalHeight; },
+        choices: ['ArrowUp', 'ArrowDown'],
+        response_start_time: stimulus_onset,  // start RT from targe/noise onset 
+        data: {                     // save data for identification
+            'trial_id': 'main',
+            'stimulus_position': jsPsych.timelineVariable('stimulus_position'),
+            'cue_direction': jsPsych.timelineVariable('cue_direction'),
+            'tilt': jsPsych.timelineVariable('tilt'),
+            'marker': jsPsych.timelineVariable('marker'),
+            'correct_response': jsPsych.timelineVariable('correct_response'),
+            // 'avatar': jsPsych.timelineVariable('avatar'),
+            // 'perspective': jsPsych.timelineVariable('perspective'),
+            'congruent': jsPsych.timelineVariable('congruent')},
+        on_finish: function(data){
+            let correct = Number(jsPsych.pluginAPI.compareKeys(data.response, data.correct_response));
+            
+            data.trial_n = trial_n;
+            data.response_boolean = Math.abs(data.response.localeCompare("ArrowDown", undefined, { sensitivity: "base" }));
+            data.correct = correct;
+            n_correct.push(correct);
+            data.correct_rate = mean_array(n_correct);
+
+            // console.log("---- single trial done ----");
+            // console.log("Trial number: " + trial_n);
+            // console.log("Correct key: " + data.correct_response);
+            // console.log("Tilt?: " + data.tilt);
+            // console.log("Marker?: " + data.marker);
+            // console.log("Response: " + data.response);
+            // console.log("Response boolean: " + data.response_boolean);
+            // console.log("Correct?: " + correct);
+            // console.log("Correct rate: " + mean_array(n_correct));
+            // console.log("Congruent?: " + data.congruent);
+
+            trial_n++
+        }
+    }
+
+    // Define Catch trial procedure
+    var catch_trials_index = [];
+    var catch_n_correct = [];
+    for(var i = 0; i < n_catch_trials; i++) catch_trials_index.push(jsPsych.randomization.randomInt(3,total_n_trials-3));
+
+    const catch_gabor = {
+        obj_type: 'gabor',
+        origin_center: true,
+        tilt: jsPsych.timelineVariable('tilt'),
+        sf: stim_sf,
+        phase: stim_phase,
+        width: stim_size,
+        sc: stim_sc,
+        startX: function() { return (jsPsych.timelineVariable('stimulus_position') === 'left')? left_coord[0] : right_coord[0]; },
+        startY: function() { return (jsPsych.timelineVariable('stimulus_position') === 'left')? left_coord[1] : right_coord[1]; },
+        // contrast: function() { return threshold * jsPsych.timelineVariable('present'); },
+        contrast: catch_contrast,
+        noiseContrast: noiseConstant,
+        show_start_time: stimulus_onset, // ms after the start of the trial
+        show_end_time: stimulus_onset + stimulus_duration, // 300ms duration
+    }
+
+    const catch_trial = {
+        type: jsPsychPsychophysics,
+        stimuli: [fixation_cross, arrow_cue, marker, catch_gabor, question], 
+        canvas_height: function() { return globalHeight; },
+        choices: ['ArrowUp', 'ArrowDown'],
+        response_start_time: stimulus_onset,  // start RT from targe/noise onset 
+        data: {                     // save data for identification
+            'trial_id': 'catch',
+            'stimulus_position': jsPsych.timelineVariable('stimulus_position'),
+            'cue_direction': jsPsych.timelineVariable('cue_direction'),
+            'tilt': jsPsych.timelineVariable('tilt'),
+            'marker': jsPsych.timelineVariable('marker'),
+            'correct_response': jsPsych.timelineVariable('correct_response'),
+            // 'avatar': jsPsych.timelineVariable('avatar'),
+            // 'perspective': jsPsych.timelineVariable('perspective'),
+            'congruent': jsPsych.timelineVariable('congruent')},
+        on_finish: function(data){
+            let correct = Number(jsPsych.pluginAPI.compareKeys(data.response, data.correct_response));
+          
+            data.trial_n = trial_n;
+            data.response_boolean = Math.abs(data.response.localeCompare("ArrowDown", undefined, { sensitivity: "base" }));
+            data.correct = correct;
+            catch_n_correct.push(correct);
+            data.catch_correct_rate = mean_array(catch_n_correct);
+
+            trial_n++
+        }
+    }
+
+    const catch_trial_conditional = {
+      timeline: [catch_trial],
+      timeline_variables: main_trial_variables,
+      sample: {
+          type: 'without-replacement',
+          size: 1
+        },
+      conditional_function: function(){
+          return catch_trials_index.includes(trial_n);
+        },
+    };
+
+    // Define Break Block
+    const break_point = Math.round((total_n_trials + n_catch_trials)/n_blocks);
+    var break_intervals = [];
+    for(var i = 1; i < n_blocks; i++) break_intervals.push(break_point*i);
+    // console.log(break_intervals);
+    var block_n = 0;
+
+    const break_trial= {
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: function() {
+        block_n++
+        return `<div style="font-size: ${0.7 * deg2pixConst}px;">
+          <p><b>BREAK TIME</b></p></br>
+          <p>You are doing great! You completed ${block_n} out of ${n_blocks} blocks in this task.<br><br>Now please take a little break, at least 7 seconds.</p></br>
+          <p>Press SPACE when you are ready to continue</p>
+        </div>`;
+      },
+      choices: " ",
+    };
+
+    const break_conditional = {
+      timeline: [break_trial],
+      conditional_function: function(){
+          if(break_intervals.includes(trial_n)){
+              return true;
+          } else {
+              return false;
+          }
+        }
+    };
+
+    /* Define test procedure */
+    const test_procedure = {
+      timeline: [break_conditional, main_trial, catch_trial_conditional],
+      timeline_variables: main_trial_variables,
+      repetitions: n_trials_multiplier,
+      randomize_order: true,
+       // on_timeline_start: function() {threshold = 0.01},
+    };
+    timeline.push(test_procedure);
+
+
+    /* * * * * * * * * * * * */
+    /*     Finish Study      */
+    /* * * * * * * * * * * * */
+
+    const debrief_block = {
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: function() {
+        return `<div style="font-size: ${0.6 * deg2pixConst}px;">
+          <p>Thank you for your participation!<p></br>
+          <p>This task was designed to be difficult, and you were ${Math.round(mean_array(n_correct) * 100)}% correct!</p>
+          <p>You can now close this page.</p>
+          </div>`;
+      },
+      choices: "NO_KEYS",
+    };
+    timeline.push(debrief_block);
+
+    // /* finish connection with pavlovia.org */
+    // var pavlovia_finish = {
+    //     type: jsPsychPavlovia,
+    //     command: "finish",
+    //     on_finish: function() {
+    //       const end_message = `<div style="font-size: ${0.6 * deg2pixConst}px;">
+    //       <p>Thank you for your participation!<p></br>
+    //       <p>This task was designed to be difficult, and you were ${Math.round(mean_array(n_correct) * 100)}% correct!</p>
+    //       <p><b>Copy and paste this code into Prolific to complete the study:</b><br> COU7NGKE </p> </br>
+    //       <p>After entering the code in Prolific, you can close this page.<br>
+    //       If you see a warning about unsaved information, please ignore it and click "Leave Page" to close. Your data has been saved!</p>
+    //       </div>`;
+    //       const jsPsych_el = jsPsych.getDisplayElement();
+    //       jsPsych_el.innerHTML = end_message;
+    //     },
+    // };
+    // timeline.push(pavlovia_finish);
+
+    /* start the experiment */
+    jsPsych.run(timeline);
+
+  </script>
+</html>
